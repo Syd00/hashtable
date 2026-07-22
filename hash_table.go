@@ -1,7 +1,10 @@
 // Implementation of a basic hash table
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // Node is a single element of a linked list
 // used to manage collisions in the hash table
@@ -14,6 +17,7 @@ type Node[K comparable, V any] struct {
 // HashTable represents a generic hash table.
 // Utilizes generics (K must be comparable) and V any
 type HashTable[K comparable, V any] struct {
+	mu       sync.RWMutex
 	nodes    []*Node[K, V]
 	hashFunc func(key K) int
 	count    int
@@ -44,6 +48,8 @@ func (ht HashTable[K, V]) hash(key K) int {
 // Put add a key,value couple in the HashTable
 // If load factor > 75% automatically resize
 func (ht *HashTable[K, V]) Put(key K, value V) {
+	ht.mu.Lock()
+	defer ht.mu.Unlock()
 	bucket := ht.hash(key)
 
 	curr := ht.nodes[bucket]
@@ -69,10 +75,34 @@ func (ht *HashTable[K, V]) Put(key K, value V) {
 	}
 }
 
+func (ht *HashTable[K, V]) putUnlocked(key K, value V) {
+	bucket := ht.hash(key)
+
+	curr := ht.nodes[bucket]
+	for curr != nil {
+		if curr.key == key {
+			curr.value = value
+			return
+		}
+		curr = curr.next
+	}
+
+	newNode := &Node[K, V]{
+		key:   key,
+		value: value,
+		next:  ht.nodes[bucket],
+	}
+
+	ht.nodes[bucket] = newNode
+	ht.count++
+}
+
 // Search for a value associated with the key
 // if key exists return value, true
 // if key doesn't exists return zero-value of type V and false
 func (ht *HashTable[K, V]) Get(key K) (V, bool) {
+	ht.mu.RLock()
+	defer ht.mu.RUnlock()
 	var zero V
 	bucket := ht.hash(key)
 	curr := ht.nodes[bucket]
@@ -89,6 +119,8 @@ func (ht *HashTable[K, V]) Get(key K) (V, bool) {
 // returns true if element is found and deleted.
 // returns false if element is not found.
 func (ht *HashTable[K, V]) Delete(key K) bool {
+	ht.mu.Lock()
+	defer ht.mu.Unlock()
 	bucket := ht.hash(key)
 
 	var prev *Node[K, V] = nil
