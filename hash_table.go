@@ -1,19 +1,36 @@
+// Implementation of a basic hash table
 package main
 
 import "fmt"
 
+// Node is a single element of a linked list
+// used to manage collisions in the hash table
 type Node[K comparable, V any] struct {
 	key   K
 	value V
 	next  *Node[K, V]
 }
 
+// HashTable represents a generic hash table.
+// Utilizes generics (K must be comparable) and V any
 type HashTable[K comparable, V any] struct {
 	nodes    []*Node[K, V]
 	hashFunc func(key K) int
 	count    int
 }
 
+// NewHashTable inizialize an HashTable with initial size
+// and an hash function personalized for key type
+func NewHashTable[K comparable, V any](size int, hashFunc func(key K) int) *HashTable[K, V] {
+	return &HashTable[K, V]{
+		nodes:    make([]*Node[K, V], size),
+		hashFunc: hashFunc,
+		count:    0,
+	}
+}
+
+// hash is an helper to calculate the index of the bucket.
+// Applies hash function to the key
 func (ht HashTable[K, V]) hash(key K) int {
 	h := ht.hashFunc(key)
 
@@ -24,14 +41,8 @@ func (ht HashTable[K, V]) hash(key K) int {
 	return h % len(ht.nodes)
 }
 
-func NewHashTable[K comparable, V any](size int, hashFunc func(key K) int) *HashTable[K, V] {
-	return &HashTable[K, V]{
-		nodes:    make([]*Node[K, V], size),
-		hashFunc: hashFunc,
-		count:    0,
-	}
-}
-
+// Put add a key,value couple in the HashTable
+// If load factor > 75% automatically resize
 func (ht *HashTable[K, V]) Put(key K, value V) {
 	bucket := ht.hash(key)
 
@@ -58,6 +69,9 @@ func (ht *HashTable[K, V]) Put(key K, value V) {
 	}
 }
 
+// Search for a value associated with the key
+// if key exists return value, true
+// if key doesn't exists return zero-value of type V and false
 func (ht *HashTable[K, V]) Get(key K) (V, bool) {
 	var zero V
 	bucket := ht.hash(key)
@@ -71,6 +85,9 @@ func (ht *HashTable[K, V]) Get(key K) (V, bool) {
 	return zero, false
 }
 
+// Delete removes a key,value couple from the HashTable.
+// returns true if element is found and deleted.
+// returns false if element is not found.
 func (ht *HashTable[K, V]) Delete(key K) bool {
 	bucket := ht.hash(key)
 
@@ -92,6 +109,7 @@ func (ht *HashTable[K, V]) Delete(key K) bool {
 	return false
 }
 
+// resize is a private method that double the bucket array size.
 func (ht *HashTable[K, V]) resize() {
 	newSize := len(ht.nodes) * 2
 	oldNodes := ht.nodes
@@ -107,6 +125,7 @@ func (ht *HashTable[K, V]) resize() {
 	}
 }
 
+// StringHash calculates the hash of a string using DJB2 algorithm.
 func StringHash(s string) int {
 	hash := 5381
 	for i := 0; i < len(s); i++ {
