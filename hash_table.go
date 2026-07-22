@@ -50,25 +50,8 @@ func (ht HashTable[K, V]) hash(key K) int {
 func (ht *HashTable[K, V]) Put(key K, value V) {
 	ht.mu.Lock()
 	defer ht.mu.Unlock()
-	bucket := ht.hash(key)
 
-	curr := ht.nodes[bucket]
-	for curr != nil {
-		if curr.key == key {
-			curr.value = value
-			return
-		}
-		curr = curr.next
-	}
-
-	newNode := &Node[K, V]{
-		key:   key,
-		value: value,
-		next:  ht.nodes[bucket],
-	}
-
-	ht.nodes[bucket] = newNode
-	ht.count++
+	ht.putUnlocked(key, value)
 
 	if ht.count*4 > len(ht.nodes)*3 {
 		ht.resize()
@@ -151,7 +134,39 @@ func (ht *HashTable[K, V]) resize() {
 	for _, head := range oldNodes {
 		curr := head
 		for curr != nil {
-			ht.Put(curr.key, curr.value)
+			ht.putUnlocked(curr.key, curr.value)
+			curr = curr.next
+		}
+	}
+}
+
+// Keys returns a slice containing all the keys in the hashtable
+func (ht *HashTable[K, V]) Keys() []K {
+	ht.mu.RLock()
+	defer ht.mu.RUnlock()
+
+	keys := make([]K, 0, ht.count)
+	for _, head := range ht.nodes {
+		curr := head
+		for curr != nil {
+			keys = append(keys, curr.key)
+			curr = curr.next
+		}
+	}
+	return keys
+}
+
+func (ht *HashTable[K, V]) Range(f func(key K, value V) bool) {
+	ht.mu.RLock()
+	defer ht.mu.RUnlock()
+
+	for _, head := range ht.nodes {
+		curr := head
+		for curr != nil {
+			keepGoing := f(curr.key, curr.value)
+			if !keepGoing {
+				return
+			}
 			curr = curr.next
 		}
 	}
@@ -167,25 +182,54 @@ func StringHash(s string) int {
 }
 
 func main() {
-	// Partiamo con una tabella PICCOLISSIMA: solo 2 bucket!
-	ht := NewHashTable[string, int](2, StringHash)
+	ht := NewHashTable[string, int](4, StringHash)
 
-	fmt.Println("Dimensione iniziale bucket:", len(ht.nodes)) // Stampava: 2
-
-	// Inseriamo 5 elementi (supererà di molto il Load Factor 0.75!)
 	ht.Put("mario", 30)
 	ht.Put("luigi", 25)
-	//ht.Put("peach", 28)
-	//ht.Put("bowser", 40)
-	ht.Put("yoshi", 12)
+	ht.Put("peach", 28)
 
-	fmt.Println("Elementi totali (count):", ht.count)
-	fmt.Println("Nuova dimensione bucket dopo resize:", len(ht.nodes)) // Dovrebbe essere raddoppiata a 4 o 8!
+	// Estraiamo tutte le chiavi
+	chiavi := ht.Keys()
+	fmt.Println("Chiavi estratte:", chiavi)
 
-	// Verifichiamo che tutti i dati siano ancora accessibili dopo il rehash
-	val, ok := ht.Get("mario")
-	fmt.Printf("Get('mario'): %d, trovato: %t\n", val, ok)
+	// Verifica della lunghezza
+	if len(chiavi) != 3 {
+		fmt.Printf("ERRORE: Ci si aspettavano 3 chiavi, trovate %d\n", len(chiavi))
+	}
 
-	val, ok = ht.Get("yoshi")
-	fmt.Printf("Get('yoshi'): %d, trovato: %t\n", val, ok)
+	// Creiamo un set temporaneo per controllare la presenza di tutte le chiavi
+	attese := map[string]bool{"mario": true, "luigi": true, "peach": true}
+	for _, k := range chiavi {
+		delete(attese, k) // Rimuoviamo la chiave trovata
+	}
+
+	// Se la mappa 'attese' è vuota, significa che tutte le chiavi erano presenti!
+	if len(attese) == 0 {
+		fmt.Println("Test Keys(): SUCCESS!")
+	} else {
+		fmt.Println("Test Keys(): FALLITO, mancavano delle chiavi!")
+	}
+
+	fmt.Println("\n=== TEST RANGE ===")
+
+	// CASO 1: Scorrimento completo e somma dei valori
+	sommaEta := 0
+	ht.Range(func(key string, value int) bool {
+		fmt.Printf("Elemento: %s -> %d\n", key, value)
+		sommaEta += value
+		return true // Continua l'iterazione
+	})
+
+	// 30 (mario) + 25 (luigi) + 28 (peach) = 83
+	fmt.Println("Somma età totale:", sommaEta)
+
+	// CASO 2: Interruzione anticipata (si ferma al primo elemento)
+	conteggioVisitati := 0
+	ht.Range(func(key string, value int) bool {
+		conteggioVisitati++
+		return false // Interrompe subito l'iterazione alla prima chiave!
+	})
+
+	fmt.Println("Elementi visitati prima dello stop:", conteggioVisitati)
+	// Stampava 1!
 }
