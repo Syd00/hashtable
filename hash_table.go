@@ -2,7 +2,6 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -179,57 +178,4 @@ func StringHash(s string) int {
 		hash = ((hash << 5) + hash) + int(s[i]) // hash * 33 + char
 	}
 	return hash
-}
-
-func main() {
-	ht := NewHashTable[string, int](4, StringHash)
-
-	ht.Put("mario", 30)
-	ht.Put("luigi", 25)
-	ht.Put("peach", 28)
-
-	// Estraiamo tutte le chiavi
-	chiavi := ht.Keys()
-	fmt.Println("Chiavi estratte:", chiavi)
-
-	// Verifica della lunghezza
-	if len(chiavi) != 3 {
-		fmt.Printf("ERRORE: Ci si aspettavano 3 chiavi, trovate %d\n", len(chiavi))
-	}
-
-	// Creiamo un set temporaneo per controllare la presenza di tutte le chiavi
-	attese := map[string]bool{"mario": true, "luigi": true, "peach": true}
-	for _, k := range chiavi {
-		delete(attese, k) // Rimuoviamo la chiave trovata
-	}
-
-	// Se la mappa 'attese' è vuota, significa che tutte le chiavi erano presenti!
-	if len(attese) == 0 {
-		fmt.Println("Test Keys(): SUCCESS!")
-	} else {
-		fmt.Println("Test Keys(): FALLITO, mancavano delle chiavi!")
-	}
-
-	fmt.Println("\n=== TEST RANGE ===")
-
-	// CASO 1: Scorrimento completo e somma dei valori
-	sommaEta := 0
-	ht.Range(func(key string, value int) bool {
-		fmt.Printf("Elemento: %s -> %d\n", key, value)
-		sommaEta += value
-		return true // Continua l'iterazione
-	})
-
-	// 30 (mario) + 25 (luigi) + 28 (peach) = 83
-	fmt.Println("Somma età totale:", sommaEta)
-
-	// CASO 2: Interruzione anticipata (si ferma al primo elemento)
-	conteggioVisitati := 0
-	ht.Range(func(key string, value int) bool {
-		conteggioVisitati++
-		return false // Interrompe subito l'iterazione alla prima chiave!
-	})
-
-	fmt.Println("Elementi visitati prima dello stop:", conteggioVisitati)
-	// Stampava 1!
 }
